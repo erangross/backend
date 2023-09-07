@@ -162,8 +162,8 @@ app.use((err, req, res, next) => {
 });
 
 const options = {
-  cert: fs.readFileSync('./server.crt'),
-  key: fs.readFileSync('./server.key')
+  cert: fs.readFileSync('../keys/server.crt'),
+  key: fs.readFileSync('../keys/server.key')
 };
 
 const server = https.createServer(options, app);
