@@ -3,7 +3,7 @@ const path = require('path');
 const express = require('express');
 const router = express.Router();
 const OpenAI = require('openai');
-const Conversation = require('./models/conversation');
+const Conversation = require('./models/Conversation');
 const { getUserAuthCollection, getConversationsCollection, closeConnection } = require('./db');
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -34,13 +34,10 @@ router.get('chat/css/chat-style.css', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'web', 'css', 'chat-style.css'));
 });
 
-// Handle POST requests to the / endpoint
 router.post('/chat', async (req, res) => {
   const message = req.body.message;
   try {
-    // Get the conversations collection
-    const conversationsCollection = await getConversationsCollection();
-
+    // Get the chatbot's response to the user's message
     const chatCompletion = await openai.chat.completions.create({
       messages: [
         { role: "system", content: "You are a professional doctor, answer medical questions only, refuse any other not related question with manners." },
@@ -48,46 +45,15 @@ router.post('/chat', async (req, res) => {
         { role: "user", content: message }
       ],
       model: "gpt-3.5-turbo",
-      max_tokens: 512,
+      max_tokens: 256,
       temperature: 0.1
     });
     const chatbotResponse = chatCompletion.choices[0].message["content"]
     conversationHistory.push({ role: "user", content: message });
     conversationHistory.push({ role: "assistant", content: chatbotResponse });
 
-    // Save the conversation history to the database
-    const userId = req.session.userId;
-    const conversationTitle = req.session.conversationTitle;
-    const conversation = await conversationsCollection.findOne({ userId: userId, title: conversationTitle });
-    if (conversation) {
-      conversation.conversation.push({ role: "user", content: message });
-      conversation.conversation.push({ role: "assistant", content: chatbotResponse });
-      await conversationsCollection.updateOne({ userId: userId, title: conversationTitle }, { $set: { conversation: conversation.messages } });
-    } else {
-      const userAuthCollection = await getUserAuthCollection();
-      const user = await userAuthCollection.findOne({ _id: userId });
-      if (user) {
-        const newConversation = new Conversation({
-          userId: userId,
-          title: conversationTitle,
-          conversation: [
-            { role: "user", content: message },
-            { role: "assistant", content: chatbotResponse }
-          ]
-        });
-        await conversationsCollection.insertOne(newConversation);
-      }
-    }
-
-    // If the conversation title is not set, set it to the chatbot response after the first question
-    if (!req.session.conversationTitle && conversationHistory.length === 4) {
-      req.session.conversationTitle = chatbotResponse;
-    }
-
-    // Close the connection to the MongoDB server
-    await closeConnection();
-
-    res.json({ response: chatbotResponse});
+    // Send the chatbot's response to the client
+    res.json({ response: chatbotResponse });
   } catch (err) {
     if (err instanceof OpenAI.APIError) {
       const statusCode = err.status;
@@ -101,58 +67,37 @@ router.post('/chat', async (req, res) => {
   }
 });
 
-// Handle POST requests to the /chatTitle endpoint
 router.post('/chatTitle', async (req, res) => {
-  const message = req.body.message;
+  const userQuestion = req.body.message;
+  console.log('userQuestion', userQuestion);
+  const botAnswer = req.body.responseData;
+  console.log('botAnswer', botAnswer);
   try {
-    let conversationTitle = req.session.conversationTitle;
-    if (!conversationTitle) {
-      // If the conversation title is not set, check if the message is a greeting or too short
-      const words = message.trim().split(/\s+/);
-      if (words.length <= 2 || ['hello', 'hi', 'hey'].includes(words[0].toLowerCase())) {
-        // If the message is a greeting or too short, set a default conversation title
-        conversationTitle = 'Request for Medical Advice and Guidance';
-      } else {
-        // If the message is not a greeting and long enough, generate a conversation title using GPT-3
-        const chatCompletion = await openai.chat.completions.create({
-          messages: [
-            { role: "system", content: "You are a professional doctor, write 5 words professional title regarding the medical message you receive " },
-            { role: "user", content: message }
-          ],
-          model: "gpt-3.5-turbo",
-          max_tokens: 128,
-          temperature: 0.1
-        });
-        conversationTitle = chatCompletion.choices[0].message["content"].trim();
-        conversationTitle = conversationTitle.replace(/^Conversation title set to: /, '')
-      }
-      // Save the conversation title to the session
-      req.session.conversationTitle = conversationTitle;
-      console.log(`Conversation title set to: ${conversationTitle}`);
+    // Check if the user input is a real question
+    const words = userQuestion.trim().split(' ');
+    const isRealQuestion = words.length > 2 && !['hi', 'hey', 'hello', 'hola'].includes(words[0].toLowerCase());
+
+    // Generate a conversation title using the OpenAI API if the user input is a real question
+    let conversationTitle = '';
+    if (isRealQuestion) {
+      const titleCompletion = await openai.chat.completions.create({
+        messages: [
+          { role: "system", content: "create very short title from the message " },
+          { role: "user", content: botAnswer }
+        ],
+        model: "gpt-3.5-turbo",
+        max_tokens: 128,
+        temperature: 0.1
+      });
+      const conversationTitleRaw = titleCompletion.choices[0].message["content"];
+      const startIndex = conversationTitleRaw.indexOf('"') + 1;
+      const endIndex = conversationTitleRaw.lastIndexOf('"');
+      conversationTitle = conversationTitleRaw.substring(startIndex, endIndex);
     } else {
-      // If the conversation title is already set, check if the message is a question
-      const words = message.trim().split(/\s+/);
-      if (words.length > 2 && !['hello', 'hi', 'hey'].includes(words[0].toLowerCase())) {
-        // If the message is a question, overwrite the conversation title using GPT-3
-        const chatCompletion = await openai.chat.completions.create({
-          messages: [
-            { role: "system", content: "You are a professional doctor, write one title only for the conversation" },
-            { role: "user", content: message }
-          ],
-          model: "gpt-3.5-turbo",
-          max_tokens: 128,
-          temperature: 0.1
-        });
-        conversationTitle = chatCompletion.choices[0].message["content"].trim();
-        conversationTitle = conversationTitle.replace(/^Conversation title set to: /, '')
-        // Save the new conversation title to the session
-        req.session.conversationTitle = conversationTitle;
-        console.log(`Conversation title updated to: ${conversationTitle}`);
-      }
+      conversationTitle = 'Untitled Conversation';
     }
-      
-    // Send the conversation title in the response without the prefix "Conversation title set to: "
-    res.json({ response: conversationTitle});
+    // Send the conversation title to the client
+    res.json({ response: conversationTitle });
   } catch (err) {
     if (err instanceof OpenAI.APIError) {
       const statusCode = err.status;
@@ -166,62 +111,61 @@ router.post('/chatTitle', async (req, res) => {
   }
 });
 
-// Handle GET requests to the /conversation-history/:userId/:conversationTitle endpoint
-router.get('/conversation-history/:userId/:conversationTitle', async (req, res) => {
+// Handle POST requests to the /saveMessage endpoint
+router.post('/saveMessage', async (req, res) => {
+  const userId = req.body.userId;
+  const conversationTitle = req.body.conversationTitle;
+  const message = req.body.message;
+  const response = req.body.response;
   try {
-    // Get the user ID and conversation title from the request parameters
-    const userId = req.params.userId;
-    const conversationTitle = req.params.conversationTitle;
-
     // Get the conversations collection
     const conversationsCollection = await getConversationsCollection();
 
-    // Find the conversation in the database
+    // Check if a conversation with the given title and user ID already exists in the database
     const conversation = await conversationsCollection.findOne({ userId: userId, title: conversationTitle });
-
     if (conversation) {
-      // If the conversation exists, return the conversation history and title
-      res.json({ conversationTitle: conversationTitle, conversationHistory: conversation.messages });
+      // If the conversation exists, update it with the new message and response
+      conversation.messages.push({ role: "user", content: message });
+      conversation.messages.push({ role: "assistant", content: response });
+      await conversationsCollection.updateOne({ userId: userId, title: conversationTitle }, { $set: { messages: conversation.messages } });
     } else {
-      // If the conversation doesn't exist, return a default title and an empty conversation history
-      res.json({ conversationTitle: 'New Conversation', conversationHistory: [] });
+      // If the conversation does not exist, create a new conversation with the given title and user ID
+      const newConversation = new Conversation({
+        userId: userId,
+        title: conversationTitle,
+        messages: [
+          { role: "user", content: message },
+          { role: "assistant", content: response }
+        ]
+      });
+      await conversationsCollection.insertOne(newConversation);
     }
 
     // Close the connection to the MongoDB server
     await closeConnection();
+
+    // Send a response to the client
+    res.json({ message: 'Message saved to database' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'InternalServerError', message: 'An internal server error occurred' });
   }
 });
 
-// Handle PUT requests to the /conversation/:userId/:conversationTitle endpoint
-router.put('/conversation/:userId/:conversationTitle', async (req, res) => {
+// Handle GET requests to the /conversations/:userId endpoint
+router.get('/conversations/:userId', async (req, res) => {
   try {
-    // Get the user ID and conversation title from the request parameters
+    // Get the user ID from the request parameters
     const userId = req.params.userId;
-    const conversationTitle = req.params.conversationTitle;
-
-    // Get the message and response from the request body
-    const message = req.body.message;
-    const response = req.body.response;
 
     // Get the conversations collection
     const conversationsCollection = await getConversationsCollection();
 
-    // Find the conversation in the database
-    const conversation = await conversationsCollection.findOne({ userId: userId, title: conversationTitle });
+    // Find all conversations for the user in the database
+    const conversations = await conversationsCollection.find({ userId: userId }).toArray();
 
-    if (conversation) {
-      // If the conversation exists, add the new message and response to the conversation
-      conversation.conversation.push({ role: "user", content: message });
-      conversation.conversation.push({ role: "assistant", content: response });
-      await conversationsCollection.updateOne({ userId: userId, title: conversationTitle }, { $set: { conversation: conversation.messages } });
-      res.json({ message: 'Conversation updated successfully' });
-    } else {
-      // If the conversation doesn't exist, return an error message
-      res.status(404).json({ error: 'ConversationNotFound', message: 'The conversation was not found' });
-    }
+    // Return the list of conversations
+    res.json({ conversations: conversations });
 
     // Close the connection to the MongoDB server
     await closeConnection();

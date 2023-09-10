@@ -9,7 +9,6 @@ const signup = require('./signup');
 const login = require('./login');
 const chat = require('./chat');
 const path = require('path');
-const http = require('http');
 const { MongoClient } = require('mongodb');
 
 // Add session middleware with a random UUID as the secret key
@@ -123,8 +122,10 @@ async function run() {
 }
 run().catch(console.dir);
 
-// Add the following line to disable favicon requests
-app.get('/favicon.ico', (req, res) => res.status(204));
+
+// Serve the favicon.ico file
+app.use('/favicon.ico', express.static(path.join(__dirname, '../frontend/vitalsignaiiamges/vitalsignailogo.ico')));
+
 
 // Serve static files from the web folder
 app.use(express.static(path.join(__dirname, '../frontend')));

@@ -2,44 +2,44 @@ const mongoose = require('mongoose');
 
 const userAuthSchema = new mongoose.Schema({
   email: {
-    type: String,
+    type: 'string',
     required: true,
     unique: true
   },
   enabled: {
-    type: Boolean,
+    type: 'boolean',
     required: true
   },
   lastLoginDate: {
-    type: Date,
+    type: 'date',
     default: null
   },
   passwordHash: {
-    type: String,
+    type: 'string',
     required: true
   },
   numPasswordFailures: {
-    type: Number,
+    type: 'number',
     default: 0
   },
   confirmEmail: {
-    type: Boolean,
+    type: 'boolean',
     required: true
   },
   signupDate: {
-    type: Date,
+    type: 'date',
     required: true
   },
   emailVerificationToken: {
-    type: String,
+    type: 'string',
     default: null
   },
   encryptionKey: {
-    type: String,
+    type: 'string',
     required: true
   },
   encryptionIV: {
-    type: String,
+    type: 'string',
     required: true
   }
 });
