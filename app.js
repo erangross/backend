@@ -123,6 +123,16 @@ async function run() {
 run().catch(console.dir);
 
 
+
+// Middleware to block URLs with the ".html" suffix
+app.use((req, res, next) => {
+  if (req.url.endsWith('.html')) {
+    res.status(403).send('Access denied');
+  } else {
+    next();
+  }
+});
+
 // Serve the favicon.ico file
 app.use('/favicon.ico', express.static(path.join(__dirname, '../frontend/vitalsignaiiamges/vitalsignailogo.ico')));
 
@@ -132,6 +142,8 @@ app.use(express.static(path.join(__dirname, '../frontend')));
 
 // Serve static files from the css folder
 app.use('/css', express.static(path.join(__dirname, '../frontend/css')));
+
+
 
 // Logging middleware
 app.use(morgan('dev'));
