@@ -70,9 +70,7 @@ router.post('/chat', async (req, res) => {
 
 router.post('/chatTitle', async (req, res) => {
   const userQuestion = req.body.message;
-  console.log('userQuestion', userQuestion);
   const botAnswer = req.body.responseData;
-  console.log('botAnswer', botAnswer);
   try {
     // Check if the user input is a real question
     const words = userQuestion.trim().split(' ');
