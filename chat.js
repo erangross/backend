@@ -5,6 +5,7 @@ const router = express.Router();
 const OpenAI = require('openai');
 const Conversation = require('./models/Conversation');
 const { getUserAuthCollection, getConversationsCollection, closeConnection } = require('./db');
+const { Console } = require('console');
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
@@ -82,7 +83,7 @@ router.post('/chatTitle', async (req, res) => {
     if (isRealQuestion) {
       const titleCompletion = await openai.chat.completions.create({
         messages: [
-          { role: "system", content: "create very short title from the message " },
+          { role: "system", content: "create title with four words only from the answer" },
           { role: "user", content: botAnswer }
         ],
         model: "gpt-3.5-turbo",
@@ -90,9 +91,7 @@ router.post('/chatTitle', async (req, res) => {
         temperature: 0.1
       });
       const conversationTitleRaw = titleCompletion.choices[0].message["content"];
-      const startIndex = conversationTitleRaw.indexOf('"') + 1;
-      const endIndex = conversationTitleRaw.lastIndexOf('"');
-      conversationTitle = conversationTitleRaw.substring(startIndex, endIndex);
+      conversationTitle = conversationTitleRaw
     } else {
       conversationTitle = 'Untitled Conversation';
     }
@@ -132,11 +131,10 @@ router.post('/saveMessage', async (req, res) => {
       conversation = await conversationsCollection.findOne({ userId: userId, title: 'Untitled Conversation' });
       if (conversation) {
         // If the conversation exists, update its title to the new title received from the client and add the new message and response to it
-        const newConversationTitle = req.body.newConversationTitle;
-        conversation.title = newConversationTitle;
+        conversation.title = conversationTitle;
         conversation.messages.push({ role: "user", content: message });
         conversation.messages.push({ role: "assistant", content: response });
-        await conversationsCollection.updateOne({ _id: conversation._id }, { $set: { title: newConversationTitle, messages: conversation.messages } });
+        await conversationsCollection.updateOne({ _id: conversation._id }, { $set: { title: conversation.title, messages: conversation.messages } });
       } else {
         // If the conversation does not exist, create a new conversation with the given title and user ID
         const newConversation = new Conversation({
