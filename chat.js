@@ -122,23 +122,33 @@ router.post('/saveMessage', async (req, res) => {
     const conversationsCollection = await getConversationsCollection();
 
     // Check if a conversation with the given title and user ID already exists in the database
-    const conversation = await conversationsCollection.findOne({ userId: userId, title: conversationTitle });
+    let conversation = await conversationsCollection.findOne({ userId: userId, title: conversationTitle });
     if (conversation) {
-      // If the conversation exists, update it with the new message and response
       conversation.messages.push({ role: "user", content: message });
       conversation.messages.push({ role: "assistant", content: response });
-      await conversationsCollection.updateOne({ userId: userId, title: conversationTitle }, { $set: { messages: conversation.messages } });
+      await conversationsCollection.updateOne({ _id: conversation._id }, { $set: { messages: conversation.messages } });
     } else {
-      // If the conversation does not exist, create a new conversation with the given title and user ID
-      const newConversation = new Conversation({
-        userId: userId,
-        title: conversationTitle,
-        messages: [
-          { role: "user", content: message },
-          { role: "assistant", content: response }
-        ]
-      });
-      await conversationsCollection.insertOne(newConversation);
+      // Check if a conversation with the 'Untitled Conversation' title and user ID already exists in the database
+      conversation = await conversationsCollection.findOne({ userId: userId, title: 'Untitled Conversation' });
+      if (conversation) {
+        // If the conversation exists, update its title to the new title received from the client and add the new message and response to it
+        const newConversationTitle = req.body.newConversationTitle;
+        conversation.title = newConversationTitle;
+        conversation.messages.push({ role: "user", content: message });
+        conversation.messages.push({ role: "assistant", content: response });
+        await conversationsCollection.updateOne({ _id: conversation._id }, { $set: { title: newConversationTitle, messages: conversation.messages } });
+      } else {
+        // If the conversation does not exist, create a new conversation with the given title and user ID
+        const newConversation = new Conversation({
+          userId: userId,
+          title: conversationTitle,
+          messages: [
+            { role: "user", content: message },
+            { role: "assistant", content: response }
+          ]
+        });
+        await conversationsCollection.insertOne(newConversation);
+      }
     }
 
     // Close the connection to the MongoDB server
