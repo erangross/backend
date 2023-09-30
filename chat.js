@@ -81,7 +81,7 @@ router.post('/chatTitle', async (req, res) => {
     if (isRealQuestion) {
       const titleCompletion = await openai.chat.completions.create({
         messages: [
-          { role: "system", content: "create title with four words only from the answer" },
+          { role: "system", content: "you are professional doctor create title with four words only from the answer" },
           { role: "user", content: botAnswer }
         ],
         model: "gpt-3.5-turbo",
@@ -91,7 +91,7 @@ router.post('/chatTitle', async (req, res) => {
       const conversationTitleRaw = titleCompletion.choices[0].message["content"];
       conversationTitle = conversationTitleRaw
     } else {
-      conversationTitle = 'Untitled Conversation';
+      conversationTitle = 'New Conversation';
     }
     // Send the conversation title to the client
     res.json({ response: conversationTitle });
@@ -125,8 +125,8 @@ router.post('/saveMessage', async (req, res) => {
       conversation.messages.push({ role: "assistant", content: response });
       await conversationsCollection.updateOne({ _id: conversation._id }, { $set: { messages: conversation.messages } });
     } else {
-      // Check if a conversation with the 'Untitled Conversation' title and user ID already exists in the database
-      conversation = await conversationsCollection.findOne({ userId: userId, title: 'Untitled Conversation' });
+      // Check if a conversation with the 'New Conversation' title and user ID already exists in the database
+      conversation = await conversationsCollection.findOne({ userId: userId, title: 'New Conversation' });
       if (conversation) {
         // If the conversation exists, update its title to the new title received from the client and add the new message and response to it
         conversation.title = conversationTitle;
